@@ -1,0 +1,111 @@
+{
+  "generated_at_utc": "2026-05-08T19:20:25.582159+00:00",
+  "default_local_benchmark_model": "gpt-oss:20b",
+  "secondary_local_comparison_model": "qwen3-coder:30b",
+  "results": [
+    {
+      "probe_type": "direct_ollama",
+      "started_at_utc": "2026-05-08T19:17:04.229644+00:00",
+      "model": "gpt-oss:20b",
+      "prompt_id": "tiny_plain",
+      "prompt_kind": "plain_text",
+      "timeout_sec": 45.0,
+      "request_payload": {
+        "stream": true,
+        "max_tokens": 64
+      },
+      "base_url": "http://127.0.0.1:11434/v1",
+      "headers_received": true,
+      "first_chunk_received": true,
+      "completed": true,
+      "status_code": 200,
+      "content_type": "text/event-stream",
+      "header_latency_sec": 0.938,
+      "first_chunk_latency_sec": 0.938,
+      "completion_latency_sec": 3.406,
+      "chunk_count": 23,
+      "total_bytes": 5586,
+      "exception_type": null,
+      "exception_message": null,
+      "classification": "completed"
+    },
+    {
+      "probe_type": "direct_ollama",
+      "started_at_utc": "2026-05-08T19:17:07.641151+00:00",
+      "model": "gpt-oss:20b",
+      "prompt_id": "tiny_structured",
+      "prompt_kind": "structured_text",
+      "timeout_sec": 45.0,
+      "request_payload": {
+        "stream": true,
+        "max_tokens": 64
+      },
+      "base_url": "http://127.0.0.1:11434/v1",
+      "headers_received": true,
+      "first_chunk_received": true,
+      "completed": true,
+      "status_code": 200,
+      "content_type": "text/event-stream",
+      "header_latency_sec": 1.735,
+      "first_chunk_latency_sec": 1.735,
+      "completion_latency_sec": 7.094,
+      "chunk_count": 62,
+      "total_bytes": 15148,
+      "exception_type": null,
+      "exception_message": null,
+      "classification": "completed"
+    },
+    {
+      "probe_type": "direct_ollama",
+      "started_at_utc": "2026-05-08T19:17:14.729923+00:00",
+      "model": "qwen3-coder:30b",
+      "prompt_id": "tiny_plain",
+      "prompt_kind": "plain_text",
+      "timeout_sec": 45.0,
+      "request_payload": {
+        "stream": true,
+        "max_tokens": 64
+      },
+      "base_url": "http://127.0.0.1:11434/v1",
+      "headers_received": true,
+      "first_chunk_received": true,
+      "completed": true,
+      "status_code": 200,
+      "content_type": "text/event-stream",
+      "header_latency_sec": 0.5,
+      "first_chunk_latency_sec": 0.5,
+      "completion_latency_sec": 1.422,
+      "chunk_count": 17,
+      "total_bytes": 3964,
+      "exception_type": null,
+      "exception_message": null,
+      "classification": "completed"
+    },
+    {
+      "probe_type": "direct_ollama",
+      "started_at_utc": "2026-05-08T19:17:16.153634+00:00",
+      "model": "qwen3-coder:30b",
+      "prompt_id": "tiny_structured",
+      "prompt_kind": "structured_text",
+      "timeout_sec": 45.0,
+      "request_payload": {
+        "stream": true,
+        "max_tokens": 64
+      },
+      "base_url": "http://127.0.0.1:11434/v1",
+      "headers_received": true,
+      "first_chunk_received": true,
+      "completed": true,
+      "status_code": 200,
+      "content_type": "text/event-stream",
+      "header_latency_sec": 0.719,
+      "first_chunk_latency_sec": 0.719,
+      "completion_latency_sec": 1.156,
+      "chunk_count": 9,
+      "total_bytes": 2112,
+      "exception_type": null,
+      "exception_message": null,
+      "classification": "completed"
+    }
+  ]
+}

@@ -80,7 +80,10 @@ async def execute_query(options: dict[str, Any], query: str) -> list[Any]:
     # Create a new Codex instance and start a thread.
     # Unlike OpenCode (which manages a persistent HTTP server), Codex
     # handles its own process lifecycle internally.
-    codex = Codex({"api_key": api_key})
+    codex_options: dict[str, Any] = {"api_key": api_key}
+    if options.get("base_url"):
+        codex_options["base_url"] = options["base_url"]
+    codex = Codex(codex_options)
     thread_opts: dict[str, Any] = {
         "working_directory": options.get("working_directory", "."),
     }

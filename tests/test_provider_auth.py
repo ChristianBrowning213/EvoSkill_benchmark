@@ -68,6 +68,16 @@ def test_ensure_provider_api_key_raises_clear_error_when_missing(
         ensure_provider_api_key("openai")
 
 
+def test_ensure_provider_api_key_allows_local_ollama_placeholder(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("OLLAMA_API_KEY", raising=False)
+
+    from src.harness.provider_auth import ensure_provider_api_key
+
+    assert ensure_provider_api_key("ollama") == "ollama"
+
+
 def test_ensure_openrouter_api_key_raises_clear_error_when_missing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

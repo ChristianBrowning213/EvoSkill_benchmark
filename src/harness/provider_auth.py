@@ -8,6 +8,7 @@ import os
 PROVIDER_ENV_KEYS: dict[str, tuple[str, ...]] = {
     "anthropic": ("ANTHROPIC_API_KEY",),
     "openai": ("OPENAI_API_KEY",),
+    "ollama": ("OLLAMA_API_KEY",),
     "google": ("GOOGLE_API_KEY", "GEMINI_API_KEY"),
     "openrouter": ("OPENROUTER_API_KEY", "LLM_API_KEY"),
     "groq": ("GROQ_API_KEY",),
@@ -46,6 +47,11 @@ def ensure_provider_api_key(provider: str | None) -> str:
     value, _source = resolve_provider_api_key(normalized)
     if value:
         return value
+    if normalized == "ollama":
+        # Local Ollama's OpenAI-compatible endpoint conventionally accepts any
+        # bearer value; keeping the standard placeholder avoids forcing users
+        # to export a fake secret just to hit localhost.
+        return "ollama"
 
     expected = " or ".join(env_names)
     display_provider = "OpenRouter" if normalized == "openrouter" else normalized

@@ -1,6 +1,7 @@
 """Tests for src/harness/ — AgentTrace, Agent, sdk_config, options_utils."""
 
 import asyncio
+import json
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -364,6 +365,13 @@ class TestOptionsUtils:
         full = f"{provider}/{model}"
         assert full == DEFAULT_OPENCODE_MODEL
 
+    def test_split_opencode_model_ollama_provider_uses_local_default(self):
+        from src.harness.opencode.options import DEFAULT_LOCAL_OLLAMA_MODEL, split_opencode_model
+
+        provider, model = split_opencode_model("ollama")
+        assert provider == "ollama"
+        assert model == DEFAULT_LOCAL_OLLAMA_MODEL
+
     def test_to_opencode_tools_basic(self):
         from src.harness.opencode.options import to_opencode_tools
 
@@ -438,6 +446,129 @@ class TestOptionsUtils:
         # Data dir paths should appear in system prompt
         assert str(data_dir) in result["system"]
         assert str(data_dir) in result["add_dirs"]
+
+    def test_build_opencode_options_registers_local_ollama_provider(self, tmp_path, monkeypatch):
+        from src.harness.opencode.options import (
+            DEFAULT_LOCAL_OLLAMA_MODEL,
+            build_opencode_options,
+        )
+
+        monkeypatch.setenv("OLLAMA_API_BASE", "http://127.0.0.1:11434")
+
+        result = build_opencode_options(
+            system="prompt",
+            schema={"type": "object"},
+            tools=[],
+            project_root=tmp_path,
+            model="ollama",
+        )
+
+        assert result["provider_id"] == "ollama"
+        assert result["model_id"] == DEFAULT_LOCAL_OLLAMA_MODEL
+        assert result["model"] == f"ollama/{DEFAULT_LOCAL_OLLAMA_MODEL}"
+        assert result["requested_model"] == "ollama"
+
+        config = json.loads((tmp_path / "opencode.json").read_text())
+        assert config["provider"]["ollama"]["npm"] == "@ai-sdk/openai-compatible"
+        assert config["provider"]["ollama"]["options"]["baseURL"] == "http://127.0.0.1:11434/v1"
+        assert DEFAULT_LOCAL_OLLAMA_MODEL in config["provider"]["ollama"]["models"]
+
+    def test_build_opencode_options_registers_secondary_local_ollama_model(self, tmp_path, monkeypatch):
+        from src.harness.opencode.options import (
+            SECONDARY_LOCAL_OLLAMA_MODEL,
+            build_opencode_options,
+        )
+
+        monkeypatch.setenv("OLLAMA_API_BASE", "http://127.0.0.1:11434")
+
+        result = build_opencode_options(
+            system="prompt",
+            schema={"type": "object"},
+            tools=[],
+            project_root=tmp_path,
+            model=f"ollama/{SECONDARY_LOCAL_OLLAMA_MODEL}",
+        )
+
+        assert result["provider_id"] == "ollama"
+        assert result["model_id"] == SECONDARY_LOCAL_OLLAMA_MODEL
+        assert result["model"] == f"ollama/{SECONDARY_LOCAL_OLLAMA_MODEL}"
+
+        config = json.loads((tmp_path / "opencode.json").read_text())
+        assert SECONDARY_LOCAL_OLLAMA_MODEL in config["provider"]["ollama"]["models"]
+
+    def test_build_opencode_minimal_reply_options_uses_inline_agent_and_no_schema(self, tmp_path, monkeypatch):
+        from src.harness.opencode.options import (
+            MINIMAL_REPLY_AGENT_NAME,
+            build_opencode_minimal_reply_options,
+        )
+
+        monkeypatch.setenv("OLLAMA_API_BASE", "http://127.0.0.1:11434")
+
+        result = build_opencode_minimal_reply_options(
+            project_root=tmp_path,
+            model="ollama/qwen3-coder:30b",
+            timeout_seconds=30,
+        )
+
+        assert result["agent"] == MINIMAL_REPLY_AGENT_NAME
+        assert result["model"] == "ollama/qwen3-coder:30b"
+        assert result["tools"] == {}
+        assert result["_evoskill_async_message_polling"] is True
+        assert "format" not in result
+        assert "mode" not in result
+        assert "evoskill-reply" in result["_evoskill_opencode_inline_config"]
+
+    def test_build_opencode_inline_agent_options_moves_prompt_into_agent_config(self, tmp_path, monkeypatch):
+        from src.harness.opencode.options import (
+            INLINE_BENCHMARK_AGENT_NAME,
+            build_opencode_inline_agent_options,
+        )
+
+        monkeypatch.setenv("OLLAMA_API_BASE", "http://127.0.0.1:11434")
+
+        result = build_opencode_inline_agent_options(
+            agent_prompt="Inline benchmark prompt",
+            tools=["Read", "Write"],
+            project_root=tmp_path,
+            model="ollama/qwen3-coder:30b",
+            allow_tool_permissions=True,
+        )
+
+        assert result["agent"] == INLINE_BENCHMARK_AGENT_NAME
+        assert result["model"] == "ollama/qwen3-coder:30b"
+        assert result["_evoskill_async_message_polling"] is True
+        assert result["tools"] == {}
+        assert "system" not in result
+        inline_config = json.loads(result["_evoskill_opencode_inline_config"])
+        agent_cfg = inline_config["agent"][INLINE_BENCHMARK_AGENT_NAME]
+        assert agent_cfg["prompt"] == "Inline benchmark prompt"
+        assert agent_cfg["permission"]["read"] == "allow"
+        assert agent_cfg["permission"]["write"] == "allow"
+
+    def test_build_opencode_inline_agent_options_can_restore_body_mode_format_and_tools(self, tmp_path, monkeypatch):
+        from src.harness.opencode.options import build_opencode_inline_agent_options
+
+        monkeypatch.setenv("OLLAMA_API_BASE", "http://127.0.0.1:11434")
+
+        result = build_opencode_inline_agent_options(
+            agent_prompt="Inline benchmark prompt",
+            tools=["Read", "Bash"],
+            schema={"type": "object", "properties": {"answer": {"type": "string"}}},
+            project_root=tmp_path,
+            model="ollama/qwen3-coder:30b",
+            mode="build",
+            include_body_tools=True,
+            include_format=True,
+            allow_tool_permissions=False,
+        )
+
+        assert result["mode"] == "build"
+        assert result["tools"] == {"read": True, "bash": True}
+        assert result["format"]["type"] == "json_schema"
+        inline_config = json.loads(result["_evoskill_opencode_inline_config"])
+        permission = inline_config["agent"][result["agent"]]["permission"]
+        assert "read" not in permission
+        assert "bash" not in permission
 
 
 # ===========================================================================
@@ -955,6 +1086,10 @@ class TestCodexExecuteQuery:
         monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
 
         from src.harness.codex.executor import execute_query
+        monkeypatch.setattr(
+            "src.harness.codex.skill_discovery.ensure_agents_skills_symlink",
+            lambda *_args, **_kwargs: False,
+        )
 
         data_dir = tmp_path / "data"
         data_dir.mkdir()
@@ -977,6 +1112,53 @@ class TestCodexExecuteQuery:
         }
         assert captured["run_opts"] == {"output_schema": {"type": "object"}}
         assert captured["prompt"] == "System instructions.\n\nAnswer this."
+
+    def test_passes_optional_base_url_to_codex_sdk(self, monkeypatch, tmp_path):
+        import asyncio
+        import sys
+        import types
+
+        captured = {}
+
+        class FakeThread:
+            async def run(self, prompt, run_opts):
+                captured["prompt"] = prompt
+                captured["run_opts"] = run_opts
+                return types.SimpleNamespace(final_response='{"reply":"ok"}')
+
+        class FakeCodex:
+            def __init__(self, options=None):
+                captured["codex_options"] = options
+
+            def start_thread(self, thread_opts):
+                captured["thread_opts"] = thread_opts
+                return FakeThread()
+
+        fake_sdk = types.ModuleType("openai_codex_sdk")
+        fake_sdk.Codex = FakeCodex
+        monkeypatch.setitem(sys.modules, "openai_codex_sdk", fake_sdk)
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+
+        from src.harness.codex.executor import execute_query
+        monkeypatch.setattr(
+            "src.harness.codex.skill_discovery.ensure_agents_skills_symlink",
+            lambda *_args, **_kwargs: False,
+        )
+
+        options = {
+            "system": "System instructions.",
+            "output_schema": {"type": "object"},
+            "model": "gpt-oss:20b",
+            "working_directory": str(tmp_path),
+            "base_url": "http://127.0.0.1:11434/v1",
+        }
+
+        asyncio.run(execute_query(options, "Answer this."))
+
+        assert captured["codex_options"] == {
+            "api_key": "sk-test",
+            "base_url": "http://127.0.0.1:11434/v1",
+        }
 
 
 # ===========================================================================

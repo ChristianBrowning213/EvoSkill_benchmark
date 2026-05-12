@@ -72,6 +72,7 @@ class AgentTrace(BaseModel, Generic[T]):
 
     # Full response list for debugging
     messages: list[Any]
+    diagnostics: Optional[dict[str, Any]] = None
 
     class Config:
         arbitrary_types_allowed = True
@@ -160,6 +161,11 @@ class Agent(Generic[T]):
     async def _execute_query(self, query: str) -> list[Any]:
         """Execute a single query by delegating to the active SDK's executor."""
         options = self._get_options()
+        if isinstance(options, dict):
+            options = dict(options)
+            options["_evoskill_retry_attempt"] = getattr(self, "_active_retry_attempt", 1)
+            options["_evoskill_retry_limit"] = self.max_retries
+            options["_evoskill_request_timeout_sec"] = self.timeout_seconds
 
         sdk = get_sdk()
         if sdk == "claude":
@@ -195,6 +201,7 @@ class Agent(Generic[T]):
 
         for attempt in range(self.max_retries):
             try:
+                self._active_retry_attempt = attempt + 1
                 async with asyncio.timeout(self.timeout_seconds):
                     return await self._execute_query(query)
             except asyncio.TimeoutError:

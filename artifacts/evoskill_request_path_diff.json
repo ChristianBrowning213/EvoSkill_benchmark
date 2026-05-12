@@ -1,0 +1,207 @@
+{
+  "generated_at_utc": "2026-05-09T15:52:17.448970+00:00",
+  "model": "ollama/qwen3-coder:30b",
+  "working_reference_probe": "working_minimal_async_agent",
+  "failing_reference_probe": "benchmark_like_stream_wait",
+  "working_reference": {
+    "request_shape": {
+      "provider_id": "ollama",
+      "model": "ollama/qwen3-coder:30b",
+      "requested_model": "ollama/qwen3-coder:30b",
+      "base_url": "http://127.0.0.1:11434",
+      "base_url_source": "OLLAMA_API_BASE",
+      "dispatch_style": "async_poll",
+      "agent": "evoskill-reply",
+      "inline_agent_names": [
+        "evoskill-reply"
+      ],
+      "inline_agent_prompt_len": 106,
+      "mode": null,
+      "format_present": false,
+      "format_type": null,
+      "format_required_count": null,
+      "body_system_prompt_len": 0,
+      "user_prompt_len": 30,
+      "tool_surface_size": 0,
+      "tool_names": [],
+      "payload_size_bytes": 163,
+      "polling_enabled": true,
+      "request_timeout_sec": 45.0,
+      "cwd": "C:\\Users\\brown\\Documents\\GitHub\\EvoSkill",
+      "body_keys": [
+        "agent",
+        "model",
+        "parts"
+      ],
+      "body_preview": {
+        "agent": "evoskill-reply",
+        "mode": null,
+        "has_system": false,
+        "has_format": false,
+        "has_tools": false
+      }
+    },
+    "classification": "completed",
+    "diagnostic": {
+      "provider_request_started": true,
+      "provider_response_started": true,
+      "provider_response_completed": true,
+      "provider_response_latency_sec": 7.141,
+      "message_poll_iterations": 8
+    }
+  },
+  "failing_reference": {
+    "request_shape": {
+      "provider_id": "ollama",
+      "model": "ollama/qwen3-coder:30b",
+      "requested_model": "ollama/qwen3-coder:30b",
+      "base_url": "http://127.0.0.1:11434",
+      "base_url_source": "OLLAMA_API_BASE",
+      "dispatch_style": "stream_wait",
+      "agent": null,
+      "inline_agent_names": [],
+      "inline_agent_prompt_len": null,
+      "mode": "build",
+      "format_present": true,
+      "format_type": "json_schema",
+      "format_required_count": 2,
+      "body_system_prompt_len": 231,
+      "user_prompt_len": 233,
+      "tool_surface_size": 6,
+      "tool_names": [
+        "bash",
+        "edit",
+        "glob",
+        "grep",
+        "read",
+        "write"
+      ],
+      "payload_size_bytes": 963,
+      "polling_enabled": false,
+      "request_timeout_sec": 45.0,
+      "cwd": "C:\\Users\\brown\\Documents\\GitHub\\EvoSkill",
+      "body_keys": [
+        "format",
+        "mode",
+        "model",
+        "parts",
+        "system",
+        "tools"
+      ],
+      "body_preview": {
+        "agent": null,
+        "mode": "build",
+        "has_system": true,
+        "has_format": true,
+        "has_tools": true
+      }
+    },
+    "classification": "provider_wait",
+    "diagnostic": {
+      "provider_request_started": true,
+      "provider_response_started": false,
+      "provider_response_completed": false,
+      "provider_response_latency_sec": null,
+      "message_poll_iterations": 0
+    }
+  },
+  "key_differences": {
+    "agent": {
+      "working": "evoskill-reply",
+      "failing": null
+    },
+    "body_keys": {
+      "working": [
+        "agent",
+        "model",
+        "parts"
+      ],
+      "failing": [
+        "format",
+        "mode",
+        "model",
+        "parts",
+        "system",
+        "tools"
+      ]
+    },
+    "body_preview": {
+      "working": {
+        "agent": "evoskill-reply",
+        "mode": null,
+        "has_system": false,
+        "has_format": false,
+        "has_tools": false
+      },
+      "failing": {
+        "agent": null,
+        "mode": "build",
+        "has_system": true,
+        "has_format": true,
+        "has_tools": true
+      }
+    },
+    "body_system_prompt_len": {
+      "working": 0,
+      "failing": 231
+    },
+    "dispatch_style": {
+      "working": "async_poll",
+      "failing": "stream_wait"
+    },
+    "format_present": {
+      "working": false,
+      "failing": true
+    },
+    "format_required_count": {
+      "working": null,
+      "failing": 2
+    },
+    "format_type": {
+      "working": null,
+      "failing": "json_schema"
+    },
+    "inline_agent_names": {
+      "working": [
+        "evoskill-reply"
+      ],
+      "failing": []
+    },
+    "inline_agent_prompt_len": {
+      "working": 106,
+      "failing": null
+    },
+    "mode": {
+      "working": null,
+      "failing": "build"
+    },
+    "payload_size_bytes": {
+      "working": 163,
+      "failing": 963
+    },
+    "polling_enabled": {
+      "working": true,
+      "failing": false
+    },
+    "tool_names": {
+      "working": [],
+      "failing": [
+        "bash",
+        "edit",
+        "glob",
+        "grep",
+        "read",
+        "write"
+      ]
+    },
+    "tool_surface_size": {
+      "working": 0,
+      "failing": 6
+    },
+    "user_prompt_len": {
+      "working": 30,
+      "failing": 233
+    }
+  },
+  "most_likely_cause": "agent_inline_config"
+}
