@@ -2,8 +2,14 @@ from __future__ import annotations
 
 import asyncio
 import json
+import sys
 from pathlib import Path
 from typing import Any
+
+# Add the project root to Python path explicitly
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.agent_profiles.base_agent.base_agent import BASE_AGENT_TOOLS, PROMPT_FILE
 from src.harness.opencode import (
@@ -14,12 +20,10 @@ from src.harness.opencode import (
 from src.harness.opencode.executor import _extract_assistant_text
 from src.schemas import AgentResponse
 
-
-ROOT = Path(__file__).resolve().parents[1]
-ARTIFACT_DIR = ROOT / "artifacts" / "evoskill_inline_agent_probe"
-ARTIFACT_PATH = ROOT / "artifacts" / "evoskill_inline_agent_probe.json"
-SUMMARY_PATH = ROOT / "artifacts" / "EVOSKILL_INLINE_AGENT_SUMMARY.md"
-SUMMARY_LOG_PATH = ROOT / ".evoskill" / "logs" / "opencode_message_diagnostics.jsonl"
+ARTIFACT_DIR = PROJECT_ROOT / "artifacts" / "evoskill_inline_agent_probe"
+ARTIFACT_PATH = PROJECT_ROOT / "artifacts" / "evoskill_inline_agent_probe.json"
+SUMMARY_PATH = PROJECT_ROOT / "artifacts" / "EVOSKILL_INLINE_AGENT_SUMMARY.md"
+SUMMARY_LOG_PATH = PROJECT_ROOT / ".evoskill" / "logs" / "opencode_message_diagnostics.jsonl"
 MODEL = "ollama/qwen3-coder:30b"
 TRIVIAL_PROMPT = "this is a test give me a reply"
 BENCHMARK_QUERY = "Read README.md and reply with only the project title."
@@ -46,8 +50,8 @@ def _classify_variant(diagnostic: dict[str, Any] | None, assistant_text: str, er
             return "response_started_without_reply"
         if diagnostic.get("provider_request_started"):
             return "provider_wait"
-    if error:
-        return "request_exception"
+        if error:
+            return "request_exception"
     return "unknown"
 
 
@@ -82,7 +86,7 @@ def _variant_options(
         agent_prompt=agent_prompt,
         tools=tools,
         schema=AgentResponse.model_json_schema(),
-        project_root=ROOT,
+        project_root=PROJECT_ROOT,
         model=MODEL,
         mode=mode,
         include_body_tools=include_body_tools,
@@ -331,4 +335,14 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
+    # Ensure we're running from the project root
+    import sys
+    import os
+
+    # Add the project root to Python path explicitly
+    PROJECT_ROOT = Path(__file__).resolve().parents[1]
+    if str(PROJECT_ROOT) not in sys.path:
+        sys.path.insert(0, str(PROJECT_ROOT))
+
+    # Run the async main function
     asyncio.run(main())

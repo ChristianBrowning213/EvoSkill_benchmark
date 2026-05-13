@@ -62,21 +62,17 @@ _PROVIDER_BASE_URL_ENV_KEYS: dict[str, tuple[str, ...]] = {
     "xai": ("XAI_BASE_URL",),
 }
 
-
 class _DiagnosticProbeResponse(BaseModel):
     reply: str
-
 
 def _project_log_dir(cwd: str | Path | None) -> Path:
     root = resolve_project_root(cwd)
     return root / ".evoskill" / "logs"
 
-
 def _append_jsonl(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as fh:
         fh.write(json.dumps(payload, sort_keys=True) + "\n")
-
 
 def _safe_json(value: Any) -> Any:
     if isinstance(value, (str, int, float, bool)) or value is None:
@@ -87,13 +83,11 @@ def _safe_json(value: Any) -> Any:
         return [_safe_json(item) for item in value]
     return str(value)
 
-
 def _elapsed_seconds(started_at: float | None, ended_at: float | None = None) -> float | None:
     if started_at is None:
         return None
     finish = time.monotonic() if ended_at is None else ended_at
     return round(max(finish - started_at, 0.0), 6)
-
 
 def _resolve_provider_base_url(provider: str | None) -> tuple[str | None, str | None]:
     env_names = _PROVIDER_BASE_URL_ENV_KEYS.get(str(provider or "").strip().lower(), ())
@@ -103,16 +97,13 @@ def _resolve_provider_base_url(provider: str | None) -> tuple[str | None, str | 
             return value, env_name
     return None, None
 
-
 def _find_free_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.bind(("127.0.0.1", 0))
         return sock.getsockname()[1]
 
-
 def _resolve_key(cwd: str | Path | None) -> str:
     return str(Path(cwd).resolve()) if cwd else ""
-
 
 def _server_signature(options: dict[str, Any]) -> str:
     return json.dumps({
@@ -122,14 +113,12 @@ def _server_signature(options: dict[str, Any]) -> str:
         "provider_id": options.get("provider_id"),
     }, sort_keys=True, default=str)
 
-
 def _message_model_name(options: dict[str, Any]) -> str:
     if options.get("model"):
         return str(options["model"])
     provider_id = str(options.get("provider_id", "anthropic"))
     model_id = str(options.get("model_id", "claude-sonnet-4-6"))
     return f"{provider_id}/{model_id}"
-
 
 def _build_message_body(options: dict[str, Any], query: str) -> dict[str, Any]:
     body: dict[str, Any] = {
@@ -151,7 +140,6 @@ def _build_message_body(options: dict[str, Any], query: str) -> dict[str, Any]:
         body["tools"] = options["tools"]
     return body
 
-
 def request_shape_metadata(options: dict[str, Any], query: str) -> dict[str, Any]:
     body = _build_message_body(options, query)
     inline_config_raw = options.get("_evoskill_opencode_inline_config")
@@ -163,10 +151,10 @@ def request_shape_metadata(options: dict[str, Any], query: str) -> dict[str, Any
             inline_config = json.loads(inline_config_raw)
         except json.JSONDecodeError:
             inline_config = None
-    if isinstance(inline_config, dict):
-        agents = inline_config.get("agent") or {}
-        if isinstance(agents, dict):
-            inline_agent_names = sorted(str(name) for name in agents.keys())
+        if isinstance(inline_config, dict):
+            agents = inline_config.get("agent") or {}
+            if isinstance(agents, dict):
+                inline_agent_names = sorted(str(name) for name in agents.keys())
             chosen_agent = options.get("agent")
             if chosen_agent and isinstance(agents.get(chosen_agent), dict):
                 inline_agent_prompt_len = len(
@@ -180,8 +168,8 @@ def request_shape_metadata(options: dict[str, Any], query: str) -> dict[str, Any
     format_required_count = None
     if isinstance(format_value, dict):
         format_schema = format_value.get("schema")
-    if isinstance(format_schema, dict):
-        format_required_count = len(format_schema.get("required") or [])
+        if isinstance(format_schema, dict):
+            format_required_count = len(format_schema.get("required") or [])
 
     payload_bytes = len(json.dumps(body, sort_keys=True).encode("utf-8"))
     provider_base_url, provider_base_url_source = _resolve_provider_base_url(
@@ -223,14 +211,12 @@ def request_shape_metadata(options: dict[str, Any], query: str) -> dict[str, Any
         },
     }
 
-
 def _assistant_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [
         msg
         for msg in messages
         if str((msg.get("info") or {}).get("role", "")).strip().lower() == "assistant"
     ]
-
 
 def _extract_assistant_text(messages: list[dict[str, Any]]) -> str:
     texts: list[str] = []
@@ -240,7 +226,6 @@ def _extract_assistant_text(messages: list[dict[str, Any]]) -> str:
                 texts.append(str(part["text"]))
     return "".join(texts).strip()
 
-
 def _assistant_has_structured_output(messages: list[dict[str, Any]]) -> bool:
     for msg in _assistant_messages(messages):
         info = msg.get("info", {}) or {}
@@ -248,10 +233,8 @@ def _assistant_has_structured_output(messages: list[dict[str, Any]]) -> bool:
             return True
     return False
 
-
 def _assistant_has_meaningful_output(messages: list[dict[str, Any]]) -> bool:
     return bool(_extract_assistant_text(messages) or _assistant_has_structured_output(messages))
-
 
 def _build_message_diagnostic(options: dict[str, Any], *, base_url: str, query: str) -> dict[str, Any]:
     provider_id = str(options.get("provider_id", "anthropic")).strip().lower()
@@ -310,7 +293,6 @@ def _build_message_diagnostic(options: dict[str, Any], *, base_url: str, query: 
         "event_path": str(log_dir / _EVENT_LOG_NAME),
     }
 
-
 def _emit_diagnostic_event(options: dict[str, Any], diagnostic: dict[str, Any], event: str, **fields: Any) -> None:
     payload = {
         "event": event,
@@ -323,10 +305,8 @@ def _emit_diagnostic_event(options: dict[str, Any], diagnostic: dict[str, Any], 
     logger.info("opencode_diagnostic %s", json.dumps(payload, sort_keys=True))
     _append_jsonl(Path(diagnostic["event_path"]), payload)
 
-
 def _message_response_preview(raw_body: bytes, limit: int = 240) -> str:
     return raw_body.decode("utf-8", errors="replace")[:limit]
-
 
 def _normalize_chat_info_candidate(candidate: Any) -> dict[str, Any] | None:
     if isinstance(candidate, dict):
@@ -338,8 +318,7 @@ def _normalize_chat_info_candidate(candidate: Any) -> dict[str, Any] | None:
             normalized = _normalize_chat_info_candidate(item)
             if normalized is not None:
                 return normalized
-    return None
-
+        return None
 
 def _parse_message_response_body(
     raw_body: bytes,
@@ -390,7 +369,6 @@ def _parse_message_response_body(
     )
     raise ValueError("Failed to parse OpenCode /message response stream as JSON")
 
-
 def _extract_stop_reason(*sources: Any) -> str | None:
     for source in sources:
         if not isinstance(source, dict):
@@ -401,15 +379,12 @@ def _extract_stop_reason(*sources: Any) -> str | None:
                 return str(value)
     return None
 
-
 def _part_type(part: dict[str, Any]) -> str:
     return str(part.get("type", "")).strip().lower()
-
 
 def _is_tool_part(part: dict[str, Any]) -> bool:
     part_type = _part_type(part)
     return "tool" in part_type or "function" in part_type or part_type in {"call", "invocation"}
-
 
 def _extract_usage_tokens(usage: dict[str, Any]) -> tuple[int, int]:
     output = usage.get("output")
@@ -433,7 +408,6 @@ def _extract_usage_tokens(usage: dict[str, Any]) -> tuple[int, int]:
     except (TypeError, ValueError):
         reasoning_tokens = 0
     return output_tokens, reasoning_tokens
-
 
 def _detect_tool_selection(messages: list[dict[str, Any]]) -> tuple[bool, bool]:
     tool_indices: list[int] = []
@@ -461,7 +435,6 @@ def _detect_tool_selection(messages: list[dict[str, Any]]) -> tuple[bool, bool]:
 
     return True, assistant_after_tool
 
-
 def _capture_message_snapshot(messages: list[dict[str, Any]], diagnostic: dict[str, Any]) -> None:
     assistant_count = 0
     last_role = None
@@ -477,7 +450,6 @@ def _capture_message_snapshot(messages: list[dict[str, Any]], diagnostic: dict[s
     diagnostic["assistant_message_count"] = assistant_count
     diagnostic["last_message_role"] = last_role
 
-
 async def _fetch_provider_catalog(client: httpx.AsyncClient) -> list[dict[str, Any]]:
     response = await client.get("/provider")
     response.raise_for_status()
@@ -490,7 +462,6 @@ async def _fetch_provider_catalog(client: httpx.AsyncClient) -> list[dict[str, A
         return [item for item in payload if isinstance(item, dict)]
     return []
 
-
 def _find_provider_entry(
     providers: list[dict[str, Any]],
     provider_id: str,
@@ -500,7 +471,6 @@ def _find_provider_entry(
         if str(provider.get("id", "")).strip().lower() == normalized:
             return provider
     return None
-
 
 def _provider_catalog_error(provider_id: str, model_id: str, providers: list[dict[str, Any]]) -> RuntimeError:
     provider = _find_provider_entry(providers, provider_id)
@@ -522,7 +492,7 @@ def _provider_catalog_error(provider_id: str, model_id: str, providers: list[dic
             local_hint = "Requested provider is not registered in OpenCode."
         raise RuntimeError(
             f"{local_hint} Requested model: {provider_id}/{model_id}. "
-            f"Available providers: {', '.join(available_provider_ids[:12]) or 'none'}."
+            f"Available providers: {', '.join(available_provider_ids[:12]) or 'none'}"
         )
 
     models = provider.get("models") or {}
@@ -530,11 +500,10 @@ def _provider_catalog_error(provider_id: str, model_id: str, providers: list[dic
         available_models = sorted(str(key) for key in models.keys())[:20]
         raise RuntimeError(
             f"OpenCode provider '{provider_id}' is registered but model '{model_id}' is unavailable. "
-            f"Available models include: {', '.join(available_models) or 'none'}."
+            f"Available models include: {', '.join(available_models) or 'none'}"
         )
 
     return RuntimeError("Unknown provider catalog resolution failure")
-
 
 async def _ensure_provider_model_available(
     client: httpx.AsyncClient,
@@ -565,7 +534,6 @@ async def _ensure_provider_model_available(
         raise _provider_catalog_error(provider_id, model_id, providers)
     diagnostic["provider_catalog_checked"] = True
 
-
 async def _poll_session_messages(
     client: httpx.AsyncClient,
     session_id: str,
@@ -588,7 +556,6 @@ async def _poll_session_messages(
         await asyncio.sleep(poll_interval_sec)
     return last_messages, False
 
-
 def _suspected_stall_stage(diagnostic: dict[str, Any], *, has_assistant_output: bool) -> str:
     if not diagnostic.get("provider_request_started"):
         return "before_request"
@@ -606,7 +573,6 @@ def _suspected_stall_stage(diagnostic: dict[str, Any], *, has_assistant_output: 
         return "provider_wait"
     return "unknown"
 
-
 def _write_diagnostic_summary(diagnostic: dict[str, Any]) -> None:
     summary = {
         key: _safe_json(value)
@@ -614,7 +580,6 @@ def _write_diagnostic_summary(diagnostic: dict[str, Any]) -> None:
         if key not in {"event_path", "summary_path"}
     }
     _append_jsonl(Path(diagnostic["summary_path"]), summary)
-
 
 async def _execute_query_via_async_poll(
     client: httpx.AsyncClient,
@@ -680,20 +645,20 @@ async def _execute_query_via_async_poll(
                         first_chunk_latency_sec=diagnostic.get("first_chunk_latency_sec"),
                         first_chunk_size_bytes=len(response.content),
                     )
-                    diagnostic["provider_stream_complete"] = True
-                    diagnostic["provider_response_completed"] = True
-                    diagnostic["provider_response_latency_sec"] = _elapsed_seconds(request_started_at)
-                    chat_info = _parse_message_response_body(response.content, options, diagnostic)
-                    message_response = await client.get(f"/session/{session_id}/message")
-                    message_response.raise_for_status()
-                    messages = message_response.json()
-                    _capture_message_snapshot(messages, diagnostic)
-                    return [{
-                        "session_id": session_id,
-                        "chat_info": chat_info,
-                        "messages": messages,
-                        "diagnostics": diagnostic,
-                    }]
+                diagnostic["provider_stream_complete"] = True
+                diagnostic["provider_response_completed"] = True
+                diagnostic["provider_response_latency_sec"] = _elapsed_seconds(request_started_at)
+                chat_info = _parse_message_response_body(response.content, options, diagnostic)
+                message_response = await client.get(f"/session/{session_id}/message")
+                message_response.raise_for_status()
+                messages = message_response.json()
+                _capture_message_snapshot(messages, diagnostic)
+                return [{
+                    "session_id": session_id,
+                    "chat_info": chat_info,
+                    "messages": messages,
+                    "diagnostics": diagnostic,
+                }]
 
             messages, completed = await _poll_session_messages(
                 client,
@@ -779,7 +744,6 @@ async def _execute_query_via_async_poll(
             except BaseException:
                 pass
 
-
 def _kill_pid(pid: int) -> None:
     try:
         os.kill(pid, signal.SIGTERM)
@@ -791,11 +755,10 @@ def _kill_pid(pid: int) -> None:
             os.kill(pid, 0)
         except ProcessLookupError:
             return
-    try:
-        os.kill(pid, signal.SIGKILL)
-    except Exception:
-        pass
-
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except Exception:
+            pass
 
 def _kill_all_opencode_servers() -> None:
     """Kill all OpenCode serve processes on this machine."""
@@ -820,7 +783,6 @@ def _kill_all_opencode_servers() -> None:
     except Exception:
         pass
 
-
 def _resolve_opencode_executable() -> str:
     """Return a launchable OpenCode executable path across platforms."""
     candidates: list[str] = []
@@ -836,9 +798,10 @@ def _resolve_opencode_executable() -> str:
         appdata = os.environ.get("APPDATA", "").strip()
         if appdata:
             npm_dir = Path(appdata) / "npm"
-            candidates.extend(
-                [str(npm_dir / "opencode.cmd"), str(npm_dir / "opencode.ps1")]
-            )
+            candidates.extend([
+                str(npm_dir / "opencode.cmd"),
+                str(npm_dir / "opencode.ps1")
+            ])
 
     seen: set[str] = set()
     for candidate in candidates:
@@ -853,7 +816,6 @@ def _resolve_opencode_executable() -> str:
         "OpenCode executable not found. Install `opencode-ai` and ensure "
         "`opencode` or `opencode.cmd` is reachable."
     )
-
 
 def shutdown_project_server(project_root: str | Path | None) -> None:
     key = _resolve_key(project_root)
@@ -870,11 +832,9 @@ def shutdown_project_server(project_root: str | Path | None) -> None:
     _SERVER_SIGNATURES.pop(key, None)
     _SPAWNED_THIS_RUN.discard(key)
 
-
 def shutdown_all_servers() -> None:
     for key in list(set(_SERVER_PORTS) | set(_SERVER_PIDS) | set(_SPAWNED_THIS_RUN)):
         shutdown_project_server(key)
-
 
 def _wait_for_port(port: int, timeout: float = 15) -> None:
     deadline = time.monotonic() + timeout
@@ -884,7 +844,6 @@ def _wait_for_port(port: int, timeout: float = 15) -> None:
                 return
         except OSError:
             time.sleep(0.5)
-
 
 def _push_provider_auth(base_url: str) -> None:
     """Push any configured provider API keys into the OpenCode auth store."""
@@ -902,34 +861,63 @@ def _push_provider_auth(base_url: str) -> None:
                     pass
                 break
 
-
 def _ensure_server(options: dict[str, Any]) -> str:
     """Return ``http://127.0.0.1:<port>`` for a running OpenCode server."""
     key = _resolve_key(options.get("cwd"))
     signature = _server_signature(options)
 
+    # Create a diagnostic dictionary for server events
+    diagnostic = _build_message_diagnostic(options, base_url="", query="")
+    diagnostic["run_id"] = uuid.uuid4().hex
+    diagnostic["probe_type"] = "server_management"
+    diagnostic["request_kind"] = "server_start"
+
+    # DEBUG: Log server reuse decision
     if key in _SPAWNED_THIS_RUN:
-        if _SERVER_SIGNATURES.get(key) != signature:
-            shutdown_project_server(key)
-        else:
+        reuse = _SERVER_SIGNATURES.get(key) == signature
+        _emit_diagnostic_event(options, diagnostic, "server_reuse_decision", reuse=reuse, signature_match=_SERVER_SIGNATURES.get(key) == signature, current_signature=signature, cached_signature=_SERVER_SIGNATURES.get(key))
+        if reuse:
             port = _SERVER_PORTS.get(key)
             if port is not None:
                 return f"http://127.0.0.1:{port}"
+        else:
+            shutdown_project_server(key)
 
-    if key in _SPAWNED_THIS_RUN:
-        port = _SERVER_PORTS.get(key)
-        if port is not None:
-            return f"http://127.0.0.1:{port}"
-
+    # DEBUG: Log server restart decision
+    _emit_diagnostic_event(options, diagnostic, "server_restart", reason="signature mismatch or new key")
     _kill_all_opencode_servers()
     time.sleep(0.5)
 
     port = _find_free_port()
     env = dict(os.environ)
     apply_provider_auth_env(options.get("provider_id"), env)
-    inline_config = options.get("_evoskill_opencode_inline_config")
-    if inline_config:
-        env["OPENCODE_CONFIG_CONTENT"] = str(inline_config)
+
+    # Use official OpenCode config injection path via OPENCODE_CONFIG_CONTENT
+    # Build config in the same format as ollama launch opencode --config
+    config = {
+        "provider": {
+            "ollama": {
+                "name": "Ollama (Local)",
+                "npm": "@ai-sdk/openai-compatible",
+                "options": {
+                    "baseURL": "http://127.0.0.1:11434/v1",
+                    "apiKey": "ollama"
+                },
+                "models": {
+                    "gpt-oss:20b": {"name": "gpt-oss:20b"},
+                    "qwen3-coder:30b": {"name": "qwen3-coder:30b"}
+                }
+            }
+        }
+    }
+
+    # DEBUG: Log effective config being injected
+    _emit_diagnostic_event(options, diagnostic, "server_config_injected", config=json.dumps(config, sort_keys=True))
+
+    env["OPENCODE_CONFIG_CONTENT"] = json.dumps(config, sort_keys=True)
+
+    # DEBUG: Log presence of OPENCODE_CONFIG_CONTENT in env
+    _emit_diagnostic_event(options, diagnostic, "env_opencode_config_present", value="OPENCODE_CONFIG_CONTENT" in env)
     executable = _resolve_opencode_executable()
     command = [executable, "serve", "--port", str(port), "--hostname", "127.0.0.1"]
 
@@ -970,7 +958,6 @@ def _ensure_server(options: dict[str, Any]) -> str:
     _push_provider_auth(base_url)
     return base_url
 
-
 async def execute_query(options: dict[str, Any], query: str) -> list[Any]:
     if not isinstance(options, dict):
         raise TypeError(f"OpenCode executor requires dict options, got {type(options)}")
@@ -979,6 +966,9 @@ async def execute_query(options: dict[str, Any], query: str) -> list[Any]:
     base_url = _ensure_server(options)
     diagnostic = _build_message_diagnostic(options, base_url=base_url, query=query)
     request_timeout_sec = float(options.get("_evoskill_request_timeout_sec", _TIMEOUT) or _TIMEOUT)
+
+    # DEBUG: Log /message handler entry point
+    _emit_diagnostic_event(options, diagnostic, "message_handler_enter", request_kind="message", model_name=_message_model_name(options))
 
     try:
         async with httpx.AsyncClient(base_url=base_url, timeout=request_timeout_sec) as client:
@@ -1022,6 +1012,10 @@ async def execute_query(options: dict[str, Any], query: str) -> list[Any]:
                 f"/session/{session_id}/message",
                 json=body,
             )
+
+            # DEBUG: Log provider dispatch start
+            _emit_diagnostic_event(options, diagnostic, "provider_dispatch_start", request_method="POST", request_url=f"/session/{session_id}/message")
+
             response = await client.send(request, stream=True)
             try:
                 diagnostic["provider_http_headers_received"] = True
@@ -1088,21 +1082,50 @@ async def execute_query(options: dict[str, Any], query: str) -> list[Any]:
                             f"{type(snapshot_exc).__name__}: {snapshot_exc}"
                         )
                     raise
-            finally:
-                await response.aclose()
+                finally:
+                    await response.aclose()
 
-            diagnostic["message_poll_iterations"] = 1
-            message_response = await client.get(f"/session/{session_id}/message")
-            message_response.raise_for_status()
-            messages = message_response.json()
-            _capture_message_snapshot(messages, diagnostic)
-            if not raw_chunks and int(diagnostic.get("assistant_message_count", 0) or 0) == 0:
-                diagnostic["empty_success_observed"] = True
-                raise RuntimeError(
-                    "OpenCode /message returned HTTP 200 with an empty body and persisted no assistant message. "
-                    "This usually means the server hit an internal error after committing response headers."
+                diagnostic["message_poll_iterations"] = 1
+                message_response = await client.get(f"/session/{session_id}/message")
+                message_response.raise_for_status()
+                messages = message_response.json()
+                _capture_message_snapshot(messages, diagnostic)
+                if not raw_chunks and int(diagnostic.get("assistant_message_count", 0) or 0) == 0:
+                    diagnostic["empty_success_observed"] = True
+                    raise RuntimeError(
+                        "OpenCode /message returned HTTP 200 with an empty body and persisted no assistant message. "
+                        "This usually means the server hit an internal error after committing response headers."
+                    )
+            except Exception as exc:
+                # DEBUG: Log provider dispatch exception
+                _emit_diagnostic_event(options, diagnostic, "provider_dispatch_exception", exception_type=type(exc).__name__, exception=str(exc))
+                diagnostic["provider_exception_type"] = type(exc).__name__
+                diagnostic["provider_exception"] = str(exc)
+                diagnostic["suspected_stall_stage"] = _suspected_stall_stage(
+                    diagnostic,
+                    has_assistant_output=False,
                 )
+                _emit_diagnostic_event(
+                    options,
+                    diagnostic,
+                    "provider_request_exception",
+                    exception_type=diagnostic["provider_exception_type"],
+                    exception=diagnostic["provider_exception"],
+                    suspected_stall_stage=diagnostic["suspected_stall_stage"],
+                )
+                _write_diagnostic_summary(diagnostic)
+                raise
+
+            return [{
+                "session_id": session_id,
+                "chat_info": chat_info,
+                "messages": messages,
+                "diagnostics": diagnostic,
+            }]
+
     except Exception as exc:
+        # DEBUG: Log provider dispatch exception
+        _emit_diagnostic_event(options, diagnostic, "provider_dispatch_exception", exception_type=type(exc).__name__, exception=str(exc))
         diagnostic["provider_exception_type"] = type(exc).__name__
         diagnostic["provider_exception"] = str(exc)
         diagnostic["suspected_stall_stage"] = _suspected_stall_stage(
@@ -1119,14 +1142,6 @@ async def execute_query(options: dict[str, Any], query: str) -> list[Any]:
         )
         _write_diagnostic_summary(diagnostic)
         raise
-
-    return [{
-        "session_id": session_id,
-        "chat_info": chat_info,
-        "messages": messages,
-        "diagnostics": diagnostic,
-    }]
-
 
 def parse_response(
     messages: list[Any],
@@ -1209,15 +1224,15 @@ def parse_response(
         diagnostic["completion_observed"] = has_assistant_output
         if parse_attempt_failed:
             diagnostic["parse_failures"] = int(diagnostic.get("parse_failures", 0) or 0) + 1
-            if isinstance(opts, dict):
-                _emit_diagnostic_event(
-                    opts,
-                    diagnostic,
-                    "provider_stream_parse_failed",
-                    parse_error=parse_error,
-                    structured_output_present=raw_structured is not None,
-                    assistant_text_present=bool(result_text.strip()),
-                )
+        if isinstance(opts, dict):
+            _emit_diagnostic_event(
+                opts,
+                diagnostic,
+                "provider_stream_parse_failed",
+                parse_error=parse_error,
+                structured_output_present=raw_structured is not None,
+                assistant_text_present=bool(result_text.strip()),
+            )
         diagnostic["suspected_stall_stage"] = _suspected_stall_stage(
             diagnostic,
             has_assistant_output=has_assistant_output,
@@ -1241,7 +1256,6 @@ def parse_response(
         "messages": messages,
         "diagnostics": diagnostic or None,
     }
-
 
 async def run_diagnostic_probe(
     options: dict[str, Any],
@@ -1267,7 +1281,6 @@ async def run_diagnostic_probe(
 
     probe_messages = await execute_query(probe_options, prompt)
     return parse_response(probe_messages, _DiagnosticProbeResponse, lambda: probe_options)
-
 
 async def run_minimal_reply_smoke(
     *,
@@ -1313,6 +1326,5 @@ async def run_minimal_reply_smoke(
         "diagnostics": diagnostics,
         "options": options,
     }
-
 
 atexit.register(shutdown_all_servers)

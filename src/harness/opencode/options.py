@@ -122,20 +122,13 @@ def _normalize_permission_block(value: Any) -> dict[str, Any]:
 
 
 def _load_opencode_config(root: Path) -> tuple[Path, dict[str, Any]] | None:
-    jsonc_path = root / "opencode.jsonc"
-    config_path = root / "opencode.json"
-    if jsonc_path.exists() and not config_path.exists():
-        return None
+    """Load opencode.json config.
 
-    config: dict[str, Any] = {}
-    if config_path.exists():
-        try:
-            config = json.loads(config_path.read_text())
-        except json.JSONDecodeError:
-            return None
-
-    config.setdefault("$schema", "https://opencode.ai/config.json")
-    return config_path, config
+    This function is now deprecated. Config is injected via OPENCODE_CONFIG_CONTENT
+    in executor.py instead of using static opencode.json files.
+    """
+    # No longer needed - config is injected via OPENCODE_CONFIG_CONTENT
+    return None
 
 
 def _normalize_ollama_base_url(raw: str | None) -> str | None:
@@ -250,18 +243,19 @@ def build_opencode_options(
     mode: str = "build",
     data_dirs: Iterable[str] | None = None,
 ) -> dict[str, Any]:
-    """Build an options dict for the OpenCode SDK."""
+    """Build an options dict for the OpenCode SDK.
+
+    Note: This function no longer generates opencode.json files. The config is
+    injected via OPENCODE_CONFIG_CONTENT in executor.py instead.
+    """
     root = resolve_project_root(project_root)
     requested_model = str(model).strip() if model is not None else None
     provider_id, model_id = split_opencode_model(model)
     resolved_model = f"{provider_id}/{model_id}"
     resolved_add_dirs = resolve_data_dirs(root, data_dirs)
-    ensure_opencode_provider_config(
-        root,
-        provider_id=provider_id,
-        model_id=model_id,
-    )
-    ensure_opencode_project_permissions(root, resolved_add_dirs)
+
+    # Remove static config generation - config is injected via OPENCODE_CONFIG_CONTENT
+    # in executor.py instead of using opencode.json files
 
     system_with_dirs = system
     if resolved_add_dirs:
@@ -302,7 +296,7 @@ def build_opencode_inline_agent_options(
     include_body_tools: bool = False,
     include_format: bool = False,
     allow_tool_permissions: bool = False,
-    timeout_seconds: float = 45.0,
+    timeout_seconds: float = 90.0,
     agent_name: str = INLINE_BENCHMARK_AGENT_NAME,
     description: str = "EvoSkill inline OpenCode benchmark agent.",
 ) -> dict[str, Any]:
@@ -371,7 +365,7 @@ def build_opencode_minimal_reply_options(
     *,
     project_root: str | Path | None = None,
     model: str | None = None,
-    timeout_seconds: float = 45.0,
+    timeout_seconds: float = 90.0,
 ) -> dict[str, Any]:
     """Build the lightest truthful OpenCode local-reply options.
 
