@@ -222,6 +222,11 @@ class TestExecuteQuery:
         sent_body = fake_client.sent_request.kwargs["json"]
         assert sent_body["model"]["providerID"] == "openrouter"
         assert sent_body["model"]["modelID"] == "minimax/minimax-m2.7"
+        raw_diagnostics = result[0]["diagnostics"]
+        assert raw_diagnostics["completion_observed"] is True
+        assert raw_diagnostics["assistant_text_present"] is True
+        assert raw_diagnostics["assistant_structured_present"] is True
+        assert raw_diagnostics["assistant_output_tokens"] == 5
 
         fields = executor.parse_response(result, AgentResponse, lambda: options)
         assert fields["output"] is not None

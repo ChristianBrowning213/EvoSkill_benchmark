@@ -1,5 +1,23 @@
 # Comparator Adapter Notes
 
+## Materialization patch status
+
+EvoSkill now records assistant materialization on the raw OpenCode `execute_query()` payload after fetching persisted session messages. This fixes the stale diagnostic case where:
+
+- provider request started
+- headers arrived
+- first chunk arrived
+- provider stream completed
+- assistant text or structured output existed
+- `completion_observed` still remained `false`
+
+Latest tiny `/message` controls now classify as `completed` for:
+
+- `ollama/gpt-oss:20b` plain and structured prompts
+- `ollama/qwen3-coder:30b` plain and structured prompts
+
+The remaining blocker is narrower and separate: the minimal inline-agent smoke still times out in the async-poll path with no first chunk and no persisted assistant message. That means the materialization flag bug is fixed, but the local OpenCode/Ollama inline-agent path is not ready for a DreamSkillsBench 2-row sanity run yet.
+
 ## Why the wrong model was being used
 
 `qwen2.5-coder:14b` was not coming from an older hidden benchmark default. It came from the recent local-Ollama OpenCode support work:

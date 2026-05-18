@@ -13,7 +13,7 @@ SDK-specific logic lives in:
 import asyncio
 import logging
 from typing import TYPE_CHECKING, Any, Callable, Generic, Optional, Type, TypeVar, Union
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from .sdk_config import get_sdk, is_claude_sdk, is_codex_sdk, is_goose_sdk
 
 logger = logging.getLogger(__name__)
@@ -73,6 +73,19 @@ class AgentTrace(BaseModel, Generic[T]):
     # Full response list for debugging
     messages: list[Any]
     diagnostics: Optional[dict[str, Any]] = None
+
+    # Benchmark workspace path state. Populated by runtimes that receive
+    # benchmark-task path metadata.
+    workspace_root: Optional[str] = None
+    expected_output_path: Optional[str] = None
+    final_output_path: Optional[str] = None
+    final_output_path_in_workspace: Optional[bool] = None
+    files_touched: list[str] = Field(default_factory=list)
+    wrong_path_error: Optional[str] = None
+    workspace_grounded: Optional[bool] = None
+    target_workbook_path: Optional[str] = None
+    material_change_detected: Optional[bool] = None
+    benchmark_final_status: Optional[dict[str, Any]] = None
 
     class Config:
         arbitrary_types_allowed = True

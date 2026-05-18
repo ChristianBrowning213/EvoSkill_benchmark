@@ -1,0 +1,74 @@
+{
+  "generated_at_utc": "2026-05-13T13:16:20.665570+00:00",
+  "default_local_benchmark_model": "gpt-oss:20b",
+  "secondary_local_comparison_model": "qwen3-coder:30b",
+  "direct_ollama_results": {
+    "gpt_oss_20b": {
+      "tiny_plain": {
+        "first_chunk_latency_sec": 4.672,
+        "completion_latency_sec": 4.844,
+        "status": "completed"
+      },
+      "tiny_structured": {
+        "first_chunk_latency_sec": 0.515,
+        "completion_latency_sec": 0.781,
+        "status": "completed"
+      }
+    },
+    "qwen3_coder_30b": {
+      "tiny_plain": {
+        "first_chunk_latency_sec": 8.015,
+        "completion_latency_sec": 8.062,
+        "status": "completed"
+      },
+      "tiny_structured": {
+        "first_chunk_latency_sec": 0.375,
+        "completion_latency_sec": 0.422,
+        "status": "completed"
+      }
+    }
+  },
+  "opencode_inline_agent_results": {
+    "gpt_oss_20b": {
+      "tiny_plain": {
+        "provider_request_started": true,
+        "headers_received": true,
+        "first_chunk_received": true,
+        "assistant_completion_observed": false,
+        "classification": "partial_stream",
+        "assistant_text_present": true
+      },
+      "tiny_structured": {
+        "provider_request_started": true,
+        "headers_received": true,
+        "first_chunk_received": true,
+        "assistant_completion_observed": false,
+        "classification": "partial_stream",
+        "assistant_text_present": false
+      }
+    },
+    "qwen3_coder_30b": {
+      "tiny_plain": {
+        "provider_request_started": true,
+        "headers_received": true,
+        "first_chunk_received": true,
+        "assistant_completion_observed": false,
+        "classification": "partial_stream",
+        "assistant_text_present": true
+      },
+      "tiny_structured": {
+        "provider_request_started": true,
+        "headers_received": true,
+        "first_chunk_received": true,
+        "assistant_completion_observed": false,
+        "classification": "partial_stream",
+        "assistant_text_present": true
+      }
+    }
+  },
+  "factor_isolation_results": {
+    "control_regressed": true,
+    "first_exact_failing_variant": "1_baseline_inline_agent_prompt_only",
+    "narrowest_remaining_blocker": "Both the minimal OpenCode inline-agent control and the matching direct Ollama tiny-prompt check timed out before response headers during this pass."
+  }
+}

@@ -22,23 +22,23 @@
 
 ### ollama/gpt-oss:20b
 
-- direct Ollama success: `False`
-- direct Ollama error: `ReadTimeout: `
+- direct Ollama success: `True`
+- direct Ollama error: `None`
 - OpenCode minimal success: `False`
-- OpenCode error: `ReadTimeout: `
+- OpenCode error: `TimeoutError: OpenCode /message dispatch did not produce assistant output before timeout.`
 - reply: `None`
 
 ### ollama/qwen3-coder:30b
 
 - direct Ollama success: `True`
 - direct Ollama error: `None`
-- OpenCode minimal success: `True`
-- OpenCode error: `None`
-- reply: `This is a test reply.`
+- OpenCode minimal success: `False`
+- OpenCode error: `TimeoutError: OpenCode /message dispatch did not produce assistant output before timeout.`
+- reply: `None`
 
 ## Conclusion
 
-- Successful local EvoSkill/OpenCode one-shot model: `ollama/qwen3-coder:30b`
-- Reply returned: `This is a test reply.`
-- Remaining blocker for preferred model: `ReadTimeout: `
+- Successful local EvoSkill/OpenCode one-shot model: `None`
+- Reply returned: `None`
+- Remaining blocker for preferred model: `TimeoutError: OpenCode /message dispatch did not produce assistant output before timeout.`
 

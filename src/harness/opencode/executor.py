@@ -30,6 +30,13 @@ from ..provider_auth import (
     ensure_provider_api_key,
 )
 from ..utils import resolve_project_root
+from ..workspace_paths import (
+    BenchmarkPathViolation,
+    benchmark_path_state_from_options,
+    extract_path_values,
+    first_final_output_path,
+    material_change_detected,
+)
 
 _SERVER_PORTS: dict[str, int] = {}
 _SERVER_PIDS: dict[str, int] = {}
@@ -120,9 +127,30 @@ def _message_model_name(options: dict[str, Any]) -> str:
     model_id = str(options.get("model_id", "claude-sonnet-4-6"))
     return f"{provider_id}/{model_id}"
 
+def _benchmark_path_instruction(options: dict[str, Any]) -> str:
+    resolver = benchmark_path_state_from_options(options)
+    if resolver is None:
+        return ""
+    lines = [
+        "Benchmark workspace path contract:",
+        f"- workspace_root: {resolver.workspace_root}",
+        "- Treat workspace_root as the only authoritative task root.",
+        "- Prefer files inside workspace_root over any canonical benchmark source path.",
+        "- Do not read, edit, write, save, or report artifacts in external tasks directories.",
+    ]
+    if resolver.expected_output_path is not None:
+        lines.append(f"- expected_output_path: {resolver.expected_output_path}")
+    if resolver.target_workbook_path is not None:
+        lines.append(f"- target_workbook_path: {resolver.target_workbook_path}")
+    return "\n".join(lines)
+
 def _build_message_body(options: dict[str, Any], query: str) -> dict[str, Any]:
+    path_instruction = _benchmark_path_instruction(options)
+    effective_query = (
+        f"{path_instruction}\n\n{query}" if path_instruction else query
+    )
     body: dict[str, Any] = {
-        "parts": [{"type": "text", "text": query}],
+        "parts": [{"type": "text", "text": effective_query}],
         "model": {
             "providerID": options.get("provider_id", "anthropic"),
             "modelID": options.get("model_id", "claude-sonnet-4-6"),
@@ -236,6 +264,39 @@ def _assistant_has_structured_output(messages: list[dict[str, Any]]) -> bool:
 def _assistant_has_meaningful_output(messages: list[dict[str, Any]]) -> bool:
     return bool(_extract_assistant_text(messages) or _assistant_has_structured_output(messages))
 
+def _latest_assistant_info(messages: list[dict[str, Any]]) -> dict[str, Any]:
+    for msg in reversed(_assistant_messages(messages)):
+        info = msg.get("info", {}) or {}
+        if isinstance(info, dict):
+            return info
+    return {}
+
+def _record_assistant_materialization(
+    messages: list[dict[str, Any]],
+    diagnostic: dict[str, Any],
+    *,
+    chat_info: dict[str, Any] | None = None,
+) -> bool:
+    assistant_info = _latest_assistant_info(messages)
+    assistant_text_present = bool(_extract_assistant_text(messages))
+    structured_present = _assistant_has_structured_output(messages)
+    has_assistant_output = assistant_text_present or structured_present
+    output_tokens, reasoning_tokens = _extract_usage_tokens(
+        assistant_info.get("tokens", {}) or {}
+    )
+
+    diagnostic["assistant_text_present"] = assistant_text_present
+    diagnostic["assistant_structured_present"] = structured_present
+    diagnostic["assistant_output_tokens"] = output_tokens
+    diagnostic["assistant_reasoning_tokens"] = reasoning_tokens
+    diagnostic["completion_observed"] = has_assistant_output
+    diagnostic["stop_reason"] = _extract_stop_reason(assistant_info, chat_info)
+    diagnostic["suspected_stall_stage"] = _suspected_stall_stage(
+        diagnostic,
+        has_assistant_output=has_assistant_output,
+    )
+    return has_assistant_output
+
 def _build_message_diagnostic(options: dict[str, Any], *, base_url: str, query: str) -> dict[str, Any]:
     provider_id = str(options.get("provider_id", "anthropic")).strip().lower()
     provider_base_url, provider_base_url_source = _resolve_provider_base_url(provider_id)
@@ -246,7 +307,7 @@ def _build_message_diagnostic(options: dict[str, Any], *, base_url: str, query: 
     requested_model_name = options.get("requested_model") or options.get("model")
     resolved_model_name = _message_model_name(options)
 
-    return {
+    diagnostic = {
         "run_id": uuid.uuid4().hex,
         "harness": "opencode",
         "probe_type": options.get("_evoskill_probe_type", "opencode_message"),
@@ -292,6 +353,11 @@ def _build_message_diagnostic(options: dict[str, Any], *, base_url: str, query: 
         "summary_path": str(log_dir / _SUMMARY_LOG_NAME),
         "event_path": str(log_dir / _EVENT_LOG_NAME),
     }
+    resolver = benchmark_path_state_from_options(options)
+    if resolver is not None:
+        diagnostic.update(resolver.to_state())
+        diagnostic.update(resolver.material_state_before())
+    return diagnostic
 
 def _emit_diagnostic_event(options: dict[str, Any], diagnostic: dict[str, Any], event: str, **fields: Any) -> None:
     payload = {
@@ -303,7 +369,8 @@ def _emit_diagnostic_event(options: dict[str, Any], diagnostic: dict[str, Any], 
         **{key: _safe_json(value) for key, value in fields.items()},
     }
     logger.info("opencode_diagnostic %s", json.dumps(payload, sort_keys=True))
-    _append_jsonl(Path(diagnostic["event_path"]), payload)
+    if diagnostic.get("event_path"):
+        _append_jsonl(Path(diagnostic["event_path"]), payload)
 
 def _message_response_preview(raw_body: bytes, limit: int = 240) -> str:
     return raw_body.decode("utf-8", errors="replace")[:limit]
@@ -434,6 +501,129 @@ def _detect_tool_selection(messages: list[dict[str, Any]]) -> tuple[bool, bool]:
             break
 
     return True, assistant_after_tool
+
+def _extract_files_touched(messages: list[dict[str, Any]]) -> list[str]:
+    touched: list[str] = []
+    write_like_tools = {"write", "edit", "patch", "multiedit", "save"}
+    for msg in messages:
+        for part in msg.get("parts", []) or []:
+            if not isinstance(part, dict) or not _is_tool_part(part):
+                continue
+            tool_name = str(
+                part.get("tool")
+                or part.get("name")
+                or part.get("function")
+                or part.get("tool_name")
+                or ""
+            ).strip().lower()
+            if tool_name and not any(name in tool_name for name in write_like_tools):
+                continue
+            for path in extract_path_values(part):
+                if path not in touched:
+                    touched.append(path)
+    return touched
+
+def _validate_benchmark_paths(
+    *,
+    options: dict[str, Any],
+    diagnostic: dict[str, Any],
+    messages: list[dict[str, Any]],
+    raw_structured: Any,
+    output_present: bool,
+) -> dict[str, Any]:
+    resolver = benchmark_path_state_from_options(options)
+    if resolver is None:
+        return {}
+
+    wrong_path_error = None
+    material_error = None
+    final_output_path = first_final_output_path(raw_structured)
+    if final_output_path is None and resolver.expected_output_path is not None:
+        final_output_path = str(resolver.expected_output_path)
+
+    for raw_path in _extract_files_touched(messages):
+        try:
+            resolver.record_touched(raw_path)
+        except BenchmarkPathViolation as exc:
+            wrong_path_error = str(exc)
+            break
+
+    validated_final = None
+    if wrong_path_error is None:
+        try:
+            validated_final = resolver.validate_final_output(final_output_path)
+        except BenchmarkPathViolation as exc:
+            wrong_path_error = str(exc)
+
+    if (
+        wrong_path_error is None
+        and output_present
+        and resolver.files_touched
+        and not any(resolver.is_inside(path) for path in resolver.files_touched)
+    ):
+        wrong_path_error = (
+            "success claimed while only touching files outside benchmark workspace"
+        )
+
+    before_state = {
+        "expected_output_exists_before": diagnostic.get("expected_output_exists_before"),
+        "expected_output_size_before": diagnostic.get("expected_output_size_before"),
+        "expected_output_mtime_before": diagnostic.get("expected_output_mtime_before"),
+        "expected_output_sha256_before": diagnostic.get("expected_output_sha256_before"),
+    }
+    if before_state["expected_output_exists_before"] is None:
+        before_state = resolver.material_state_before()
+    after_state = resolver.material_state_after()
+    material_changed = material_change_detected(before_state, after_state)
+
+    if wrong_path_error is None and output_present:
+        if after_state.get("expected_output_exists_after") is not True:
+            material_error = "expected output does not exist in benchmark workspace"
+        elif material_changed is not True:
+            material_error = "no material change detected for expected output"
+
+    task_complete = bool(output_present and wrong_path_error is None and material_error is None)
+    termination_reason = "completed" if task_complete else "failed"
+    if wrong_path_error:
+        termination_reason = "wrong_path_error"
+    elif material_error:
+        termination_reason = "material_change_missing"
+    elif not output_present:
+        termination_reason = "structured_output_missing"
+
+    state = resolver.to_state(final_output_path=validated_final or final_output_path)
+    state.update(before_state)
+    state.update(after_state)
+    state["material_change_detected"] = material_changed
+    state["material_change_error"] = material_error
+    state["wrong_path_error"] = wrong_path_error
+    state["benchmark_final_status"] = {
+        "summary": (
+            "Benchmark task completed with verified workspace output."
+            if task_complete
+            else (wrong_path_error or material_error or "Benchmark task did not complete.")
+        ),
+        "termination_reason": termination_reason,
+        "task_complete": task_complete,
+        "workspace_root": state.get("workspace_root"),
+        "workspace_grounded": state.get("workspace_grounded"),
+        "current_working_directory": state.get("current_working_directory"),
+        "expected_output_path": state.get("expected_output_path"),
+        "target_workbook_path": state.get("target_workbook_path"),
+        "chosen_target_workbook_path": state.get("chosen_target_workbook_path"),
+        "final_output_path": state.get("final_output_path"),
+        "final_output_path_in_workspace": state.get("final_output_path_in_workspace"),
+        "files_touched": state.get("files_touched") or [],
+        "material_change_detected": material_changed,
+        "wrong_path_error": wrong_path_error,
+        "material_change_error": material_error,
+    }
+    diagnostic.update(state)
+    if wrong_path_error:
+        diagnostic["path_violation_result"] = "wrong_path_error"
+    if material_error:
+        diagnostic["material_change_result"] = "material_change_missing"
+    return state
 
 def _capture_message_snapshot(messages: list[dict[str, Any]], diagnostic: dict[str, Any]) -> None:
     assistant_count = 0
@@ -574,6 +764,8 @@ def _suspected_stall_stage(diagnostic: dict[str, Any], *, has_assistant_output: 
     return "unknown"
 
 def _write_diagnostic_summary(diagnostic: dict[str, Any]) -> None:
+    if not diagnostic.get("summary_path"):
+        return
     summary = {
         key: _safe_json(value)
         for key, value in diagnostic.items()
@@ -653,6 +845,11 @@ async def _execute_query_via_async_poll(
                 message_response.raise_for_status()
                 messages = message_response.json()
                 _capture_message_snapshot(messages, diagnostic)
+                _record_assistant_materialization(
+                    messages,
+                    diagnostic,
+                    chat_info=chat_info,
+                )
                 return [{
                     "session_id": session_id,
                     "chat_info": chat_info,
@@ -687,6 +884,37 @@ async def _execute_query_via_async_poll(
                 header_latency_sec=diagnostic.get("response_header_latency_sec"),
             )
             response.raise_for_status()
+            if response.text.strip():
+                diagnostic["provider_first_chunk_received"] = True
+                diagnostic["first_chunk_latency_sec"] = diagnostic.get("first_chunk_latency_sec") or _elapsed_seconds(request_started_at)
+                diagnostic["provider_stream_complete"] = True
+                diagnostic["provider_response_completed"] = True
+                diagnostic["provider_response_latency_sec"] = _elapsed_seconds(request_started_at)
+                chat_info = _parse_message_response_body(response.content, options, diagnostic)
+                message_response = await client.get(f"/session/{session_id}/message")
+                message_response.raise_for_status()
+                messages = message_response.json()
+                _capture_message_snapshot(messages, diagnostic)
+                if _record_assistant_materialization(
+                    messages,
+                    diagnostic,
+                    chat_info=chat_info,
+                ):
+                    _emit_diagnostic_event(
+                        options,
+                        diagnostic,
+                        "provider_stream_complete",
+                        chunk_count=1,
+                        total_bytes=len(response.content),
+                        response_latency_sec=diagnostic.get("provider_response_latency_sec"),
+                        completion_source="post_task_final_fetch",
+                    )
+                    return [{
+                        "session_id": session_id,
+                        "chat_info": chat_info,
+                        "messages": messages,
+                        "diagnostics": diagnostic,
+                    }]
 
         if completed:
             if response_task.done():
@@ -706,6 +934,7 @@ async def _execute_query_via_async_poll(
             diagnostic["provider_stream_complete"] = True
             diagnostic["provider_response_completed"] = True
             diagnostic["provider_response_latency_sec"] = _elapsed_seconds(request_started_at)
+            _record_assistant_materialization(messages, diagnostic)
             _emit_diagnostic_event(
                 options,
                 diagnostic,
@@ -1090,6 +1319,11 @@ async def execute_query(options: dict[str, Any], query: str) -> list[Any]:
                 message_response.raise_for_status()
                 messages = message_response.json()
                 _capture_message_snapshot(messages, diagnostic)
+                _record_assistant_materialization(
+                    messages,
+                    diagnostic,
+                    chat_info=chat_info,
+                )
                 if not raw_chunks and int(diagnostic.get("assistant_message_count", 0) or 0) == 0:
                     diagnostic["empty_success_observed"] = True
                     raise RuntimeError(
@@ -1202,17 +1436,32 @@ def parse_response(
         parse_error = "No structured output returned (context limit likely exceeded)"
         parse_attempt_failed = True
 
-    cost = assistant_info.get("cost", 0.0) or 0.0
-    usage = assistant_info.get("tokens", {}) or {}
-
     opts = get_options()
     model = _message_model_name(opts) if isinstance(opts, dict) else "unknown"
     tools = list(opts.get("tools", {}).keys()) if isinstance(opts, dict) and opts.get("tools") else []
+
+    cost = assistant_info.get("cost", 0.0) or 0.0
+    usage = assistant_info.get("tokens", {}) or {}
 
     session_id = payload.get("session_id", "unknown")
     tool_selection_started, tool_selection_completed = _detect_tool_selection(all_msgs)
     assistant_output_tokens, assistant_reasoning_tokens = _extract_usage_tokens(usage)
     has_assistant_output = bool(result_text.strip() or raw_structured is not None)
+    path_state: dict[str, Any] = {}
+    if isinstance(opts, dict):
+        path_state = _validate_benchmark_paths(
+            options=opts,
+            diagnostic=diagnostic,
+            messages=all_msgs,
+            raw_structured=raw_structured,
+            output_present=output is not None,
+        )
+        if path_state.get("wrong_path_error"):
+            parse_error = f"wrong_path_error: {path_state['wrong_path_error']}"
+            output = None
+        elif path_state.get("material_change_error"):
+            parse_error = f"material_change_missing: {path_state['material_change_error']}"
+            output = None
 
     if diagnostic:
         diagnostic["session_id"] = session_id
@@ -1255,6 +1504,16 @@ def parse_response(
         "raw_structured_output": raw_structured,
         "messages": messages,
         "diagnostics": diagnostic or None,
+        "workspace_root": path_state.get("workspace_root"),
+        "expected_output_path": path_state.get("expected_output_path"),
+        "final_output_path": path_state.get("final_output_path"),
+        "final_output_path_in_workspace": path_state.get("final_output_path_in_workspace"),
+        "files_touched": path_state.get("files_touched") or [],
+        "wrong_path_error": path_state.get("wrong_path_error"),
+        "workspace_grounded": path_state.get("workspace_grounded"),
+        "target_workbook_path": path_state.get("target_workbook_path"),
+        "material_change_detected": path_state.get("material_change_detected"),
+        "benchmark_final_status": path_state.get("benchmark_final_status"),
     }
 
 async def run_diagnostic_probe(
